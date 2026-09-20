@@ -86,6 +86,10 @@
   </div>
   <span class="dim">Sort:</span>
   <span id="sortChips" class="dim">none</span>
+  <div class="pop">
+    <button id="sortBtn" title="Or shift-click a column header">+ Add sort</button>
+    <div class="menu hidden" id="sortMenu"></div>
+  </div>
   <span style="flex:1"></span>
   <button id="reset">Reset</button>
 </div>
@@ -299,11 +303,24 @@ function renderColumnMenu() {
   }));
 }
 
+function renderSortMenu() {
+  const menu = document.getElementById("sortMenu");
+  const groups = [...new Set(columns.map(c => c.group))];
+  menu.innerHTML = `<div class="dim" style="padding:2px 2px 6px">adds after the current sort</div>` +
+    groups.map(g => `<h4>${g}</h4>` + columns.filter(c => c.group === g)
+      .filter(c => !state.sort.some(s => s.id === c.id))
+      .map(c => `<label data-sort="${c.id}">${esc(c.label)}</label>`).join("")).join("");
+  menu.querySelectorAll("[data-sort]").forEach(row => row.addEventListener("click", () => {
+    closeMenus();
+    toggleSort(row.dataset.sort, true);
+  }));
+}
+
 function renderSortChips() {
   const host = document.getElementById("sortChips");
   if (!state.sort.length) { host.textContent = "none"; return; }
   host.innerHTML = state.sort.map((s, n) =>
-    `<span class="chip" draggable="true" data-n="${n}">${esc(col(s.id).label)}
+    `${n ? '<span class="dim">then</span> ' : ""}<span class="chip" draggable="true" data-n="${n}">${esc(col(s.id).label)}
        ${s.dir < 0 ? "↓" : "↑"} <span class="x" data-x="${n}">✕</span></span>`).join(" ");
   host.querySelectorAll(".chip").forEach(chip => {
     const n = Number(chip.dataset.n);
@@ -416,6 +433,7 @@ function render() {
 
 function sync() {
   renderColumnMenu();
+  renderSortMenu();
   renderSortChips();
   renderHead();
   render();
@@ -439,6 +457,12 @@ fetch("data/items.json").then(r => r.json()).then(data => {
   sync();
 });
 
+document.getElementById("sortBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const menu = document.getElementById("sortMenu");
+  closeMenus(menu);
+  menu.classList.toggle("hidden");
+});
 document.getElementById("colBtn").addEventListener("click", e => {
   e.stopPropagation();
   const menu = document.getElementById("colMenu");
