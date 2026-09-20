@@ -48,7 +48,7 @@
   .hidden { display: none; }
 
   .wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
   th, td { text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--line);
            white-space: nowrap; }
   thead th { position: sticky; top: 0; background: var(--panel); z-index: 10;
@@ -56,10 +56,18 @@
   thead th:hover { color: var(--text); }
   thead th.sorted { color: var(--accent); }
   thead tr.filters th { top: 27px; cursor: auto; font-weight: 400; z-index: 9; }
-  thead tr.filters input { width: 100%; min-width: 60px; }
-  thead tr.filters .range { display: flex; gap: 3px; }
-  thead tr.filters .range input { width: 58px; min-width: 0; }
+  thead tr.filters th > input { width: 100%; min-width: 60px; }
+  .menu input[type=checkbox] { flex: none; width: 13px; height: 13px; margin: 0; }
+  thead tr.filters .pop { display: inline-block; }
+  thead tr.filters button.on { border-color: var(--accent); color: var(--accent); }
+  .menu .range { display: flex; gap: 5px; margin-bottom: 8px; }
+  .menu .range input { width: 80px; }
+  .menu .clear { width: 100%; }
   td.num, th.num { text-align: right; }
+  /* fixed layout: numbers and enums get a set width, text columns split the rest
+     equally, so no single column is handed hundreds of unused pixels */
+  td.wrap, th.wrap { white-space: normal; }
+  td.clip { overflow: hidden; text-overflow: ellipsis; }
   th:first-child, td:first-child { position: sticky; left: 0; background: var(--bg); z-index: 8; }
   thead th:first-child { background: var(--panel); z-index: 11; }
   tbody tr:hover td:first-child { background: #1a1d24; }
@@ -96,6 +104,7 @@
 
 <div class="wrap">
   <table>
+    <colgroup id="cols"></colgroup>
     <thead>
       <tr id="head"></tr>
       <tr class="filters" id="filterRow"></tr>
@@ -349,13 +358,24 @@ function enumValues(c) {
   return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+// numbers and short enums hug their content; long text columns take the rest
+const cls = c => c.type === "num" ? "num" : c.type === "enum" ? "clip" : "wrap";
+
+const WIDTH = { num: 76, enum: 118 };
+const TEXT_MIN = 200;
+
 function renderHead() {
   const cols = state.cols.map(col);
+  document.getElementById("cols").innerHTML = cols.map(c =>
+    `<col${WIDTH[c.type] ? ` style="width:${WIDTH[c.type]}px"` : ""}>`).join("");
+  // below this the table scrolls sideways instead of squeezing the text columns
+  document.querySelector("table").style.minWidth =
+    cols.reduce((n, c) => n + (WIDTH[c.type] || TEXT_MIN), 0) + "px";
   document.getElementById("head").innerHTML = cols.map(c => {
     const at = state.sort.findIndex(s => s.id === c.id);
     const mark = at === -1 ? "" :
       ` ${state.sort[at].dir < 0 ? "↓" : "↑"}${state.sort.length > 1 ? `<sup>${at + 1}</sup>` : ""}`;
-    return `<th data-col="${c.id}" class="${c.type === "num" ? "num" : ""}${at > -1 ? " sorted" : ""}">
+    return `<th data-col="${c.id}" class="${cls(c)}${at > -1 ? " sorted" : ""}">
               ${esc(c.label)}${mark}</th>`;
   }).join("");
   document.querySelectorAll("#head th").forEach(th =>
@@ -364,10 +384,12 @@ function renderHead() {
   document.getElementById("filterRow").innerHTML = cols.map(c => {
     const f = state.filters[c.id];
     if (c.type === "num") {
-      return `<th class="num"><span class="range">
-        <input type="number" placeholder="min" data-min="${c.id}" value="${f?.min ?? ""}">
-        <input type="number" placeholder="max" data-max="${c.id}" value="${f?.max ?? ""}">
-      </span></th>`;
+      const label = !f ? "Any"
+        : f.min != null && f.max != null ? `${f.min}–${f.max}`
+        : f.min != null ? `≥ ${f.min}` : `≤ ${f.max}`;
+      return `<th class="num"><div class="pop">
+        <button data-range="${c.id}" class="${f ? "on" : ""}">${label} ▾</button>
+        <div class="menu right hidden"></div></div></th>`;
     }
     if (c.type === "enum") {
       const chosen = (f || []).length;
@@ -378,15 +400,28 @@ function renderHead() {
     return `<th><input placeholder="contains" data-text="${c.id}" value="${esc(f ?? "")}"></th>`;
   }).join("");
 
-  document.querySelectorAll("#filterRow [data-min], #filterRow [data-max]").forEach(input => {
-    input.addEventListener("change", () => {
-      const id = input.dataset.min || input.dataset.max;
-      const box = document.querySelector(`#filterRow [data-min="${id}"]`);
-      const top = document.querySelector(`#filterRow [data-max="${id}"]`);
-      setFilter(id, { min: box.value === "" ? null : Number(box.value),
-                      max: top.value === "" ? null : Number(top.value) });
-    });
-  });
+  document.querySelectorAll("#filterRow [data-range]").forEach(button =>
+    button.addEventListener("click", e => {
+      e.stopPropagation();
+      const id = button.dataset.range, menu = button.nextElementSibling;
+      const f = state.filters[id] || {};
+      menu.innerHTML = `<div class="range">
+          <input type="number" placeholder="min" value="${f.min ?? ""}">
+          <input type="number" placeholder="max" value="${f.max ?? ""}">
+        </div>
+        <button class="clear">Clear</button>`;
+      const [lo, hi] = menu.querySelectorAll("input");
+      const apply = () => setFilter(id, { min: lo.value === "" ? null : Number(lo.value),
+                                          max: hi.value === "" ? null : Number(hi.value) });
+      menu.querySelectorAll("input").forEach(x => {
+        x.addEventListener("change", apply);
+        x.addEventListener("keydown", ev => { if (ev.key === "Enter") apply(); });
+      });
+      menu.querySelector(".clear").addEventListener("click", () => setFilter(id, null));
+      closeMenus(menu);
+      menu.classList.toggle("hidden");
+      lo.focus();
+    }));
   document.querySelectorAll("#filterRow [data-text]").forEach(input => {
     let t; input.addEventListener("input", () => {
       clearTimeout(t);
@@ -418,7 +453,7 @@ function render() {
 
   document.getElementById("rows").innerHTML = page.map(i => "<tr>" + cols.map(c => {
     const v = c.cell ? c.cell(i) : esc(c.get(i) ?? "");
-    return `<td class="${c.type === "num" ? "num" : ""}">${v}</td>`;
+    return `<td class="${cls(c)}">${v}</td>`;
   }).join("") + "</tr>").join("");
 
   document.getElementById("pageInfo").textContent =
