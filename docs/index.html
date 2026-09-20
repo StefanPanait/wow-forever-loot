@@ -87,7 +87,7 @@
   <span class="dim">Sort:</span>
   <span id="sortChips" class="dim">none</span>
   <div class="pop">
-    <button id="sortBtn" title="Or shift-click a column header">+ Add sort</button>
+    <button id="sortBtn" title="Or click a column header">+ Add sort</button>
     <div class="menu hidden" id="sortMenu"></div>
   </div>
   <span style="flex:1"></span>
@@ -232,17 +232,14 @@ function showColumn(id) {
   }
 }
 
-function toggleSort(id, additive) {
+// clicking a column cycles it through the sort: off -> default -> reversed -> off,
+// appending to whatever is already sorted rather than replacing it
+function toggleSort(id) {
+  const first = col(id).type === "num" ? -1 : 1;   // numbers high first, names A-Z
   const at = state.sort.findIndex(s => s.id === id);
-  if (at === -1) {
-    const entry = { id, dir: col(id).type === "text" ? 1 : -1 };
-    state.sort = additive ? [...state.sort, entry] : [entry];
-  } else if (state.sort[at].dir === (col(id).type === "text" ? 1 : -1)) {
-    state.sort[at] = { id, dir: -state.sort[at].dir };
-    if (!additive) state.sort = [state.sort[at]];
-  } else {
-    state.sort.splice(at, 1);
-  }
+  if (at === -1) state.sort = [...state.sort, { id, dir: first }];
+  else if (state.sort[at].dir === first) state.sort[at] = { id, dir: -first };
+  else state.sort.splice(at, 1);
   if (state.sort.some(s => s.id === id)) showColumn(id);
   state.page = 0;
   sync();
@@ -312,7 +309,7 @@ function renderSortMenu() {
       .map(c => `<label data-sort="${c.id}">${esc(c.label)}</label>`).join("")).join("");
   menu.querySelectorAll("[data-sort]").forEach(row => row.addEventListener("click", () => {
     closeMenus();
-    toggleSort(row.dataset.sort, true);
+    toggleSort(row.dataset.sort);
   }));
 }
 
@@ -362,7 +359,7 @@ function renderHead() {
               ${esc(c.label)}${mark}</th>`;
   }).join("");
   document.querySelectorAll("#head th").forEach(th =>
-    th.addEventListener("click", e => toggleSort(th.dataset.col, e.shiftKey)));
+    th.addEventListener("click", () => toggleSort(th.dataset.col)));
 
   document.getElementById("filterRow").innerHTML = cols.map(c => {
     const f = state.filters[c.id];
