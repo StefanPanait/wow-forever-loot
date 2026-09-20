@@ -48,7 +48,8 @@
   .hidden { display: none; }
 
   .wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  /* columns hug their content; any leftover width stays at the right edge */
+  table { border-collapse: collapse; width: max-content; min-width: 100%; }
   th, td { text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--line);
            white-space: nowrap; }
   thead th { position: sticky; top: 0; background: var(--panel); z-index: 10;
@@ -64,10 +65,7 @@
   .menu .range input { width: 80px; }
   .menu .clear { width: 100%; }
   td.num, th.num { text-align: right; }
-  /* fixed layout: numbers and enums get a set width, text columns split the rest
-     equally, so no single column is handed hundreds of unused pixels */
-  td.wrap, th.wrap { white-space: normal; }
-  td.clip { overflow: hidden; text-overflow: ellipsis; }
+  th.pad, td.pad { width: 100%; }   /* absorbs the leftover, keeping columns tight */
   th:first-child, td:first-child { position: sticky; left: 0; background: var(--bg); z-index: 8; }
   thead th:first-child { background: var(--panel); z-index: 11; }
   tbody tr:hover td:first-child { background: #1a1d24; }
@@ -104,7 +102,6 @@
 
 <div class="wrap">
   <table>
-    <colgroup id="cols"></colgroup>
     <thead>
       <tr id="head"></tr>
       <tr class="filters" id="filterRow"></tr>
@@ -359,25 +356,17 @@ function enumValues(c) {
 }
 
 // numbers and short enums hug their content; long text columns take the rest
-const cls = c => c.type === "num" ? "num" : c.type === "enum" ? "clip" : "wrap";
-
-const WIDTH = { num: 76, enum: 118 };
-const TEXT_MIN = 200;
+const cls = c => c.type === "num" ? "num" : "";
 
 function renderHead() {
   const cols = state.cols.map(col);
-  document.getElementById("cols").innerHTML = cols.map(c =>
-    `<col${WIDTH[c.type] ? ` style="width:${WIDTH[c.type]}px"` : ""}>`).join("");
-  // below this the table scrolls sideways instead of squeezing the text columns
-  document.querySelector("table").style.minWidth =
-    cols.reduce((n, c) => n + (WIDTH[c.type] || TEXT_MIN), 0) + "px";
   document.getElementById("head").innerHTML = cols.map(c => {
     const at = state.sort.findIndex(s => s.id === c.id);
     const mark = at === -1 ? "" :
       ` ${state.sort[at].dir < 0 ? "↓" : "↑"}${state.sort.length > 1 ? `<sup>${at + 1}</sup>` : ""}`;
     return `<th data-col="${c.id}" class="${cls(c)}${at > -1 ? " sorted" : ""}">
               ${esc(c.label)}${mark}</th>`;
-  }).join("");
+  }).join("") + `<th class="pad"></th>`;
   document.querySelectorAll("#head th").forEach(th =>
     th.addEventListener("click", () => toggleSort(th.dataset.col)));
 
@@ -398,7 +387,7 @@ function renderHead() {
         <div class="menu hidden"></div></div></th>`;
     }
     return `<th><input placeholder="contains" data-text="${c.id}" value="${esc(f ?? "")}"></th>`;
-  }).join("");
+  }).join("") + `<th class="pad"></th>`;
 
   document.querySelectorAll("#filterRow [data-range]").forEach(button =>
     button.addEventListener("click", e => {
@@ -454,7 +443,7 @@ function render() {
   document.getElementById("rows").innerHTML = page.map(i => "<tr>" + cols.map(c => {
     const v = c.cell ? c.cell(i) : esc(c.get(i) ?? "");
     return `<td class="${cls(c)}">${v}</td>`;
-  }).join("") + "</tr>").join("");
+  }).join("") + `<td class="pad"></td></tr>`).join("");
 
   document.getElementById("pageInfo").textContent =
     `${rows.length.toLocaleString()} items · page ${state.page + 1} of ${pages}`;
