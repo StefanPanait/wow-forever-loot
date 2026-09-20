@@ -131,9 +131,14 @@ function baseColumns() {
     { id: "name", label: "Item", group: "Item", type: "text", get: i => i.name,
       cell: i => `<a class="q${i.quality}" href="https://www.wowhead.com/forever/item=${i.id}"
                      data-wowhead="domain=forever" target="_blank" rel="noopener">${esc(i.name)}</a>` },
-    { id: "type", label: "Type", group: "Item", type: "enum", get: i => i.type },
+    { id: "armorType", label: "Armor type", group: "Item", type: "enum",
+      get: i => i.armorType },
     { id: "slot", label: "Slot", group: "Item", type: "enum",
       get: i => SLOTS[i.slot] || i.slot },
+    { id: "weaponType", label: "Weapon", group: "Item", type: "enum",
+      get: i => i.weaponType },
+    { id: "category", label: "Category", group: "Item", type: "enum",
+      get: i => i.category },
     { id: "quality", label: "Quality", group: "Item", type: "enum", get: i => i.qualityName,
       cell: i => `<span class="q${i.quality}">${i.qualityName}</span>` },
     { id: "ilvl", label: "ilvl", group: "Item", type: "num", get: i => i.ilvl },
@@ -427,7 +432,7 @@ fetch("data/items.json").then(r => r.json()).then(data => {
   items = data;
   items.forEach(i => byId.set(i.id, i));
   columns = [...baseColumns(), ...statColumns(data)];
-  state.cols = ["name", "type", "slot", "ilvl", "reqLevel", "stats", "source"];
+  state.cols = ["name", "armorType", "slot", "ilvl", "reqLevel", "stats", "source"];
   state.sort = [{ id: "ilvl", dir: -1 }];
   fromUrl();
   document.getElementById("meta").textContent = `${items.length.toLocaleString()} items`;

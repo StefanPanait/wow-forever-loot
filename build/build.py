@@ -9,15 +9,11 @@ OUT = ROOT / "docs" / "data"
 
 QUALITY = {0: "Poor", 1: "Common", 2: "Uncommon", 3: "Rare", 4: "Epic", 5: "Legendary"}
 
-# item class -> subclass -> what you filter on.
-# Wowhead gives jewellery and other slots a negative pseudo-subclass.
-ARMOR = {
-    1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield",
-    7: "Libram", 8: "Idol", 9: "Totem", 0: "Misc", 5: "Misc",
-    -2: "Ring", -3: "Neck", -4: "Trinket", -5: "Held In Off-hand",
-    -6: "Back", -7: "Tabard", -8: "Shirt",
-}
-CLASS = {1: "Bag", 6: "Ammo", 11: "Quiver"}
+# Armor class. Wowhead gives jewellery, cloaks and off-hands a negative
+# pseudo-subclass; those have no armor class, and their slot already names them.
+ARMOR = {1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield",
+         0: "Misc", 5: "Misc"}
+RELIC = {7: "Libram", 8: "Idol", 9: "Totem"}
 WEAPON = {
     0: "Axe", 1: "Two-handed Axe", 2: "Bow", 3: "Gun", 4: "Mace",
     5: "Two-handed Mace", 6: "Polearm", 7: "Sword", 8: "Two-handed Sword",
@@ -52,13 +48,18 @@ def load_zones() -> dict[int, dict]:
     }
 
 
-def item_type(row: dict) -> str | None:
+def kinds(row: dict) -> tuple[str | None, str | None, str]:
+    """(armor class, weapon type, broad category) for one row."""
     cls, sub = row.get("classs"), row.get("subclass")
     if cls == 4:
-        return ARMOR.get(sub)
+        if sub in RELIC:
+            return None, None, RELIC[sub]
+        if sub < 0:  # rings, necks, trinkets, cloaks: no armor class
+            return None, None, "Accessory"
+        return ARMOR.get(sub), None, "Armor"
     if cls == 2:
-        return WEAPON.get(sub)
-    return CLASS.get(cls)
+        return None, WEAPON.get(sub), "Weapon"
+    return None, None, "Other"
 
 
 def sources(row: dict, zones: dict) -> list[dict]:
@@ -98,13 +99,16 @@ def build() -> None:
                 continue
             equip = (gathered.get(str(row["id"])) or {}).get("jsonequip") or {}
             stats = {STATS[k]: v for k, v in equip.items() if k in STATS and v}
+            armor_class, weapon, category = kinds(row)
             items[row["id"]] = {
                 "id": row["id"],
                 "name": row["name"],
                 "quality": row.get("quality"),
                 "qualityName": QUALITY.get(row.get("quality"), "?"),
                 "slot": row["slot"],
-                "type": item_type(row),
+                "armorType": armor_class,
+                "weaponType": weapon,
+                "category": category,
                 "ilvl": row.get("level"),
                 "reqLevel": row.get("reqlevel") or equip.get("reqlevel") or 0,
                 "armor": equip.get("armor"),
@@ -119,10 +123,10 @@ def build() -> None:
     (OUT / "items.json").write_text(json.dumps(payload, separators=(",", ":")))
     print(f"{len(payload)} items -> {OUT / 'items.json'}")
 
-    unnamed = sum(1 for i in payload if not i["type"])
+    unnamed = sum(1 for i in payload if i["category"] == "Armor" and not i["armorType"])
     nostats = sum(1 for i in payload if not i["stats"])
     nosource = sum(1 for i in payload if not i["sources"])
-    print(f"  no type: {unnamed}   no stats: {nostats}   no source: {nosource}")
+    print(f"  armor without a class: {unnamed}   no stats: {nostats}   no source: {nosource}")
 
 
 if __name__ == "__main__":
