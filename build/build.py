@@ -1,6 +1,7 @@
 """Turn the raw Wowhead sweep into the flat item list the site loads."""
 
 import json
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,15 +38,29 @@ STATS = {
 SOURCE = {1: "Crafted", 2: "Drop", 4: "Quest", 5: "Vendor", 8: "PvP"}
 SOURCE_DETAIL = {1: "drop", 2: "object", 3: "container", 5: "quest", 6: "crafted"}
 
+# Wowhead's zone "instance" type. Type 0 is the open world.
+CONTENT = {2: "dungeon", 3: "raid", 4: "battleground"}
+
+# A world drop and a dungeon drop are worlds apart to farm, so they are
+# separate kinds rather than one "drop".
+DROP_KIND = {None: "world drop", "dungeon": "dungeon drop", "raid": "raid drop",
+             "battleground": "pvp"}
+DROP_UNKNOWN = "drop (zone unknown)"
+
 
 def load_zones() -> dict[int, dict]:
     path = RAW / "zones.json"
     if not path.exists():
         return {}
     return {
-        z["id"]: {"name": z["name"], "instance": z.get("instance", 0)}
+        z["id"]: {"name": z["name"], "content": CONTENT.get(z.get("instance", 0))}
         for z in json.loads(path.read_text())
     }
+
+
+def drop_kind(zone: dict | None) -> str:
+    """Most drops carry no zone at all, and those stay unclassified."""
+    return DROP_KIND[zone["content"]] if zone else DROP_UNKNOWN
 
 
 def kinds(row: dict) -> tuple[str | None, str | None, str]:
@@ -69,21 +84,23 @@ def sources(row: dict, zones: dict) -> list[dict]:
     for more in row.get("sourcemore") or []:
         kind = SOURCE_DETAIL.get(more.get("t"), broad)
         zone = zones.get(more.get("z"))
+        if kind == "drop":
+            kind = drop_kind(zone)
         out.append(
             {
                 "kind": kind,
                 "name": more.get("n"),
                 "id": more.get("ti"),
                 "zone": zone["name"] if zone else None,
-                "instance": bool(zone and zone["instance"]),
             }
         )
     if not out:
         # no detail, but the listing still tells us the broad category
         for code in row.get("source") or []:
             if code in SOURCE:
-                out.append({"kind": SOURCE[code].lower(), "name": None, "id": None,
-                            "zone": None, "instance": False})
+                kind = SOURCE[code].lower()
+                out.append({"kind": drop_kind(None) if kind == "drop" else kind,
+                            "name": None, "id": None, "zone": None})
     return out
 
 
@@ -127,6 +144,10 @@ def build() -> None:
     nostats = sum(1 for i in payload if not i["stats"])
     nosource = sum(1 for i in payload if not i["sources"])
     print(f"  armor without a class: {unnamed}   no stats: {nostats}   no source: {nosource}")
+
+    drops = Counter(s["kind"] for i in payload for s in i["sources"]
+                    if s["kind"] in set(DROP_KIND.values()) | {DROP_UNKNOWN})
+    print("  " + "   ".join(f"{k}: {v}" for k, v in drops.most_common()))
 
 
 if __name__ == "__main__":

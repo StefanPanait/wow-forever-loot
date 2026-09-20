@@ -45,3 +45,6 @@ a data source.
 - Vanilla random-suffix items ("of the Eagle") carry no stats on their base row.
 - The new PvP sets have no source data on Wowhead yet.
 - Crafted items name the item rather than the profession.
+- 3,286 of the 4,394 drops carry no zone on their listing row, so they show as
+  "drop (zone unknown)" rather than splitting into world, dungeon and raid. Filling
+  those in needs a second sweep, one listing per zone.

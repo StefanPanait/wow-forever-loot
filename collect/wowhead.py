@@ -103,7 +103,7 @@ def sweep(slots: list[int] | None = None, resume: bool = False) -> None:
 
 
 def zones() -> None:
-    """Zone id -> name and instance type, used to name drop locations."""
+    """Zone id -> name and instance type, which name and classify drop locations."""
     with sync_playwright() as pw:
         page = pw.chromium.connect_over_cdp(CDP).contexts[0].pages[0]
         page.goto(
