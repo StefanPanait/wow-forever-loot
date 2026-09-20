@@ -9,8 +9,15 @@ OUT = ROOT / "docs" / "data"
 
 QUALITY = {0: "Poor", 1: "Common", 2: "Uncommon", 3: "Rare", 4: "Epic", 5: "Legendary"}
 
-# item class -> subclass -> what you filter on
-ARMOR = {1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield", 0: "Misc"}
+# item class -> subclass -> what you filter on.
+# Wowhead gives jewellery and other slots a negative pseudo-subclass.
+ARMOR = {
+    1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield",
+    7: "Libram", 8: "Idol", 9: "Totem", 0: "Misc", 5: "Misc",
+    -2: "Ring", -3: "Neck", -4: "Trinket", -5: "Held In Off-hand",
+    -6: "Back", -7: "Tabard", -8: "Shirt",
+}
+CLASS = {1: "Bag", 6: "Ammo", 11: "Quiver"}
 WEAPON = {
     0: "Axe", 1: "Two-handed Axe", 2: "Bow", 3: "Gun", 4: "Mace",
     5: "Two-handed Mace", 6: "Polearm", 7: "Sword", 8: "Two-handed Sword",
@@ -51,7 +58,7 @@ def item_type(row: dict) -> str | None:
         return ARMOR.get(sub)
     if cls == 2:
         return WEAPON.get(sub)
-    return None
+    return CLASS.get(cls)
 
 
 def sources(row: dict, zones: dict) -> list[dict]:

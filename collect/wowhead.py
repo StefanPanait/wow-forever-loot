@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.wowhead.com/forever/items"
@@ -36,9 +37,13 @@ SLOTS = """() => {
 
 def _load(page, url: str) -> dict:
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    page.wait_for_function(
-        "() => window.g_listviews && window.g_listviews.items", timeout=30000
-    )
+    try:
+        page.wait_for_function(
+            "() => window.g_listviews && window.g_listviews.items", timeout=20000
+        )
+    except PlaywrightTimeout:
+        # a filter that matches nothing renders no listview at all
+        return {"rows": [], "gathered": {}}
     page.wait_for_timeout(1500)
     return page.evaluate(EXTRACT)
 
@@ -61,7 +66,7 @@ def _write(name: str, url: str, payload: dict) -> int:
     return n
 
 
-def sweep(slots: list[int] | None = None) -> None:
+def sweep(slots: list[int] | None = None, resume: bool = False) -> None:
     with sync_playwright() as pw:
         page = pw.chromium.connect_over_cdp(CDP).contexts[0].pages[0]
 
@@ -75,6 +80,9 @@ def sweep(slots: list[int] | None = None) -> None:
 
         targets = slots or sorted(catalogue)
         for slot in targets:
+            if resume and list(RAW.glob(f"slot-{slot}.json")) + list(RAW.glob(f"slot-{slot}-q*.json")):
+                print(f"slot {slot}: already collected, skipping")
+                continue
             print(f"slot {slot} ({catalogue.get(slot, '?')})")
             url = f"{BASE}/slot:{slot}"
             payload = _load(page, url)
@@ -116,7 +124,9 @@ if __name__ == "__main__":
     import sys
 
     args = sys.argv[1:]
+    resume = "--resume" in args
+    args = [a for a in args if a != "--resume"]
     if args[:1] == ["zones"]:
         zones()
     else:
-        sweep([int(a) for a in args] or None)
+        sweep([int(a) for a in args] or None, resume=resume)
