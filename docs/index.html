@@ -261,10 +261,19 @@ function setFilter(id, value) {
   const empty = value == null || value === "" ||
     (Array.isArray(value) && !value.length) ||
     (typeof value === "object" && !Array.isArray(value) && value.min == null && value.max == null);
+  const shown = state.cols.includes(id);
   if (empty) delete state.filters[id];
   else { state.filters[id] = value; showColumn(id); }
   state.page = 0;
-  sync();
+  if (!shown) return sync();
+  // rebuilding the filter row would close the open popup and drop focus
+  const button = document.querySelector(`#filterRow [data-range="${id}"], #filterRow [data-enum="${id}"]`);
+  if (button) {
+    button.textContent = button.dataset.range ? rangeLabel(state.filters[id]) : enumLabel(state.filters[id]);
+    button.classList.toggle("on", !!state.filters[id]);
+  }
+  render();
+  toUrl();
 }
 
 /* ---------- url ---------- */
@@ -364,6 +373,11 @@ function enumValues(c) {
 // numbers and short enums hug their content; long text columns take the rest
 const cls = c => c.type === "num" ? "num" : "";
 
+const rangeLabel = f => (!f ? "Any"
+  : f.min != null && f.max != null ? `${f.min}–${f.max}`
+  : f.min != null ? `≥ ${f.min}` : `≤ ${f.max}`) + " ▾";
+const enumLabel = f => ((f || []).length ? `${f.length} selected` : "Any") + " ▾";
+
 function renderHead() {
   const cols = state.cols.map(col);
   document.getElementById("head").innerHTML = cols.map(c => {
@@ -379,17 +393,13 @@ function renderHead() {
   document.getElementById("filterRow").innerHTML = cols.map(c => {
     const f = state.filters[c.id];
     if (c.type === "num") {
-      const label = !f ? "Any"
-        : f.min != null && f.max != null ? `${f.min}–${f.max}`
-        : f.min != null ? `≥ ${f.min}` : `≤ ${f.max}`;
       return `<th class="num"><div class="pop">
-        <button data-range="${c.id}" class="${f ? "on" : ""}">${label} ▾</button>
+        <button data-range="${c.id}" class="${f ? "on" : ""}">${rangeLabel(f)}</button>
         <div class="menu right hidden"></div></div></th>`;
     }
     if (c.type === "enum") {
-      const chosen = (f || []).length;
       return `<th><div class="pop">
-        <button data-enum="${c.id}">${chosen ? `${chosen} selected` : "Any"} ▾</button>
+        <button data-enum="${c.id}">${enumLabel(f)}</button>
         <div class="menu hidden"></div></div></th>`;
     }
     return `<th><input placeholder="contains" data-text="${c.id}" value="${esc(f ?? "")}"></th>`;
@@ -412,7 +422,7 @@ function renderHead() {
         x.addEventListener("change", apply);
         x.addEventListener("keydown", ev => { if (ev.key === "Enter") apply(); });
       });
-      menu.querySelector(".clear").addEventListener("click", () => setFilter(id, null));
+      menu.querySelector(".clear").addEventListener("click", () => { setFilter(id, null); closeMenus(); });
       closeMenus(menu);
       menu.classList.toggle("hidden");
       lo.focus();
@@ -495,8 +505,8 @@ document.getElementById("colBtn").addEventListener("click", e => {
   closeMenus(menu);
   menu.classList.toggle("hidden");
 });
-document.addEventListener("click", () => closeMenus());
-document.querySelectorAll(".menu").forEach(m => m.addEventListener("click", e => e.stopPropagation()));
+// menus in the filter row are rebuilt on render, so check the target rather than bind per menu
+document.addEventListener("click", e => { if (!e.target.closest(".menu")) closeMenus(); });
 document.getElementById("prev").addEventListener("click", () => { state.page--; render(); toUrl(); });
 document.getElementById("next").addEventListener("click", () => { state.page++; render(); toUrl(); });
 document.getElementById("pageSize").addEventListener("change", e => {
